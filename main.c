@@ -14,16 +14,16 @@
 #define JALR  			0x67
 
 #define I     			0x13
-    #define ADDI    	0x0
+	#define ADDI		0x0
 	#define SLTI    	0x2
-    #define SLTIU   	0x3
-    #define XORI    	0x4
-    #define ORI     	0x6
-    #define ANDI    	0x7
-    #define SLLI    	0x1
-    #define SRI     	0x5
-        #define SRLI	0x00
-        #define SRAI    0x20
+	#define SLTIU		0x3
+	#define XORI		0x4
+	#define ORI			0x6
+	#define ANDI    	0x7
+	#define SLLI    	0x1
+	#define SRI     	0x5
+		#define SRLI	0x00
+		#define SRAI    0x20
 
 #define R     			0x33
 	#define ADD_SUB 	0x0
@@ -148,8 +148,8 @@ int32_t imm_B(uint32_t inst)
 	// imm[12|10:5|4:1|11] = inst[31|30:25|11:8|7]
 	return ((int32_t)(inst & 0x80000000) >> 19)
 				| ((inst & 0x80) << 4) // imm[11]
-        		| ((inst >> 20) & 0x7e0) // imm[10:5]
-        		| ((inst >> 7) & 0x1e);
+				| ((inst >> 20) & 0x7e0) // imm[10:5]
+				| ((inst >> 7) & 0x1e);
 }
 uint32_t imm_U(uint32_t inst)
 {
@@ -160,9 +160,9 @@ uint32_t imm_J(uint32_t inst)
 {
 	// imm[20|10:1|11|19:12] = inst[31|30:21|20|19:12]
 	return (uint32_t)((int32_t)(inst & 0x80000000) >> 11) //imm[20]
-        		| (inst & 0xff000) // imm[19:12]
-        		| ((inst >> 9) & 0x800) // imm[11]
-        		| ((inst >> 20) & 0x7fe); // imm[10:1]
+				| (inst & 0xff000) // imm[19:12]
+				| ((inst >> 9) & 0x800) // imm[11]
+				| ((inst >> 20) & 0x7fe); // imm[10:1]
 }
 uint32_t shamt(uint32_t inst)
 {
@@ -271,12 +271,12 @@ uint32_t CPU_execute(CPU *cpu)
 				case BGEU:	pc += (reg[rs1] >= reg[rs2]) ? (int32_t)imm_B(inst) : 4; break; // unsigned BGE?
 			} break;
 
-    default:
-        fprintf(stderr,
-                "[-] ERROR-> opcode:0x%x, funct3:0x%x, funct3:0x%x\n"
-                , opcode, funct3, funct7);
-        return 0;
-        /*exit(1);*/
+	default:
+		fprintf(stderr,
+				"[-] ERROR-> opcode:0x%x, funct3:0x%x, funct3:0x%x\n"
+				, opcode, funct3, funct7);
+		return 0;
+		/*exit(1);*/
 }
 	return inst;
 }
