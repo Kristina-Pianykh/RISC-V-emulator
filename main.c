@@ -42,15 +42,15 @@
 #define S     0x23
 	#define SB      0x0
 	#define SH      0x1
-	#define SW      0x2
+	#define SW		0x2
 
 #define L     0x03
+	#define LHU     0x5
 	#define LB      0x0
 	#define LH      0x1
 	#define LW      0x2
 	#define LBU     0x4
-	#define LHU     0x5
-
+	
 #define B     0x63
 	#define BEQ     0x0
 	#define BNE     0x1
@@ -97,7 +97,7 @@ void CPU_open_instruction_mem(CPU *cpu, const char *filename)
 		perror("stat");
 		exit(EXIT_FAILURE);
 	}
-	printf("size of instruction memory: %d Byte\n\n", sb.st_size);
+	printf("size of instruction memory: %ld Byte\n\n", sb.st_size);
 	instr_mem_size = sb.st_size;
 	cpu->instr_mem_ = malloc(instr_mem_size);
 	fread(cpu->instr_mem_, sb.st_size, 1, input_file);
@@ -124,7 +124,7 @@ void CPU_load_data_mem(CPU *cpu, const char *filename)
 		perror("stat");
 		exit(EXIT_FAILURE);
 	}
-	printf("read data for data memory: %d Byte\n\n", sb.st_size);
+	printf("read data for data memory: %ld Byte\n\n", sb.st_size);
 
 	cpu->data_mem_ = malloc(cpu->data_mem_size_);
 	fread(cpu->data_mem_, sb.st_size, 1, input_file);
@@ -191,7 +191,7 @@ uint32_t CPU_execute(CPU *cpu)
 	printf("funct7: %X\n", funct7);
 	printf("rd: %X\n", rd);
 	printf("rs1: %X\n", rs1);
-	printf("rs2: %X\n", rs2);
+	printf("rs2: %X\n\n", rs2);
 
 	reg[0] = 0; // x0 hardwired to 0 at each cycle
 
@@ -241,25 +241,25 @@ uint32_t CPU_execute(CPU *cpu)
 			pc += 4;
 			break;
 		
-		case S:
-			switch (funct3) {
-				case SB: // TODO: to implement
-				case SH: // TODO: to implement
-				case SW: // TODO: to implement
-			}
-			pc += 4;
-			break;
+		// case S:
+		// 	switch (funct3) {
+		// 		case SB: // TODO: to implement
+		// 		case SH: // TODO: to implement
+		// 		case SW: // TODO: to implement
+		// 	}
+		// 	pc += 4;
+		// 	break;
 
-		case L:
-			switch (funct3) {
-				case LB: // TODO: to implement
-				case LH: // TODO: to implement
-				case LW: // TODO: to implement
-				case LBU: // TODO: to implement
-				case LHU: // TODO: to implement
-			}
-			pc += 4;
-			break;
+		// case L:
+		// 	switch (funct3) {
+		// 		case LB: // TODO: to implement
+		// 		case LH: // TODO: to implement
+		// 		case LW: // TODO: to implement
+		// 		case LBU: // TODO: to implement
+		// 		case LHU: // TODO: to implement
+		// 	}
+		// 	pc += 4;
+		// 	break;
 
 		case B:
 			switch (funct3) {
