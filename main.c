@@ -10,7 +10,7 @@
 #define data cpu->data_mem_
 
 #define U_immediate (inst >> 12) << 12
-#define J_immediate (inst&0x80000000) ? (0xFFF00000 | (inst&0x000FF000) | (inst&0x00100000)>>9 | (inst&0x80000000)>>11 | (inst&0x7FE00000)>>20) << 1 : ((inst&0x000FF000) | (inst&0x00100000)>>9 | (inst&0x80000000)>>11 | (inst&0x7FE00000)>>20) << 1 
+#define J_immediate (inst&0x80000000) ? 0xFFF00000 | (inst&0x000FF000) | (inst&0x00100000)>>9 | (inst&0x80000000)>>11 | (inst&0x7FE00000)>>20 : (inst&0x000FF000) | (inst&0x00100000)>>9 | (inst&0x80000000)>>11 | (inst&0x7FE00000)>>20
 #define B_immediate (inst&0x80000000) ? 0xFFFFE000 | (inst&0xF00)>>7 | (inst&0x7E000000)>>20 | (inst&0x80)<<4 | (inst&0x80000000)>> 19 : (inst&0xF00)>>7 | (inst&0x7E000000)>>20 | (inst&0x80)<<4 | (inst&0x80000000)>> 19
 #define I_immediate (inst&0x80000000) ? 0xFFFFF000 | inst >> 20 : inst >> 20
 #define S_immediate (inst&0x80000000) ? 0xFFFFF000 | (inst&0xFE000000)>>20 | (inst&0xF80)>>7 : (inst&0xFE000000)>>20 | (inst&0xF80)>>7
@@ -109,10 +109,6 @@ void CPU_open_instruction_mem(CPU *cpu, const char *filename)
 	instr_mem_size = sb.st_size;
 	cpu->instr_mem_ = malloc(instr_mem_size);
 	fread(cpu->instr_mem_, sb.st_size, 1, input_file);
-	for (int i = 0; i < 100; i++)
-	{
-		printf("0x%X ", (int)cpu->instr_mem_[i]);
-	}
 	fclose(input_file);
 	return;
 }
@@ -156,59 +152,72 @@ uint32_t CPU_execute(CPU *cpu)
 	uint32_t rs2 = (inst >> 20) & 0x1f; // rs2 in bits 24..20
 	uint32_t shamt = rs2; // for SLLI, SRLI and SRAI
 	uint32_t temp;
+	uint32_t word;
 
 	reg[0] = 0; // x0 hardwired to 0 at each cycle
-	printf("\npc: %u\n", pc);
+	printf("\npc: %X\n", pc);
 	printf("instr: %X\n", inst);
-	printf("rd:%d rs1:%d rs2:%d U_immediate:0x%x J_immediate:0x%x B_immediate:0x%x I_immediate:0x%x S_immediate:0x%x funct3:0x%x funct7:0x%x\n",rd,rs1,rs2,U_immediate,J_immediate,B_immediate,I_immediate,S_immediate,funct3,funct7);
+	printf("opcode: %X\n", opcode);
+	printf("rd:%d rs1:%d rs2:%d U_immediate:0x%X J_immediate:0x%X B_immediate:0x%X I_immediate:0x%X S_immediate:0x%X funct3:0x%X funct7:0x%X\n",rd,rs1,rs2,U_immediate,J_immediate,B_immediate,I_immediate,S_immediate,funct3,funct7);
+	if (pc == 0x20) //0x000264 from this is broken
+		printf("breakpoint\n");
 	switch (opcode) {
 		case LUI:	
 			reg[rd] = U_immediate;
 			pc += 4;
 			printf("%s: reg[%u] = %X\n", "LUI", rd, U_immediate);
 			break;
-		case AUIPC:	reg[rd] = pc + (U_immediate); pc += 4;
+		case AUIPC:
 			printf("%s: reg[%u] = %u + %X = %X\n", "AUIPC", pc, U_immediate, pc + (U_immediate));
+			reg[rd] = pc + (U_immediate); pc += 4;
 			break;
-		case JAL:	reg[rd] = pc + 4; pc += (J_immediate);
-			printf("%s: reg[%u] = %u + 4 = %X, pc = %u + %X = %X\n", "JAL", pc, pc + 4, pc, J_immediate, (J_immediate) + pc);
+		case JAL:
+			printf("%s: reg[%u] = %u + 4 = %X, pc = %u + %X = %X\n", "JAL", rd, pc, pc + 4, pc, J_immediate, (J_immediate) + pc);
+			reg[rd] = pc + 4; pc += (J_immediate);
 			break;
-		case JALR:	reg[rd] = pc + 4; pc += (reg[rs1] + (I_immediate)) & 0xfffffffe;
+		case JALR:
 			printf("%s: reg[%u] = %u + 4 = %X, pc = reg[%u] + %X = %X\n", "JALR", rd, pc, pc + 4, rs1, I_immediate, pc + (reg[rs1] + (I_immediate)) & 0xfffffffe);
+			reg[rd] = pc + 4; pc += (reg[rs1] + (I_immediate)) & 0xfffffffe;
 			break;
 
 		case I:
 			switch (funct3) {
-				case ADDI:  reg[rd] = reg[rs1] + (I_immediate);
-					printf("%s: reg[%u] = reg[%u] + %X\n", "ADDI", rd, rs1, (I_immediate));
+				case ADDI:
+					printf("%s: reg[%u] = reg[%u] + %X = %X\n", "ADDI", rd, rs1, (I_immediate), reg[rs1] + (I_immediate));
+					reg[rd] = reg[rs1] + (I_immediate);
 					break;
-				case SLLI:  reg[rd] = reg[rs1] << shamt;
-					printf("%s: reg[%u] = reg[%u] << %X\n", "SLLI", rs1, shamt);
+				case SLLI:
+					printf("%s: reg[%u] = reg[%u] << %X = %X\n", "SLLI", rs1, shamt, reg[rs1] << shamt);
+					reg[rd] = reg[rs1] << shamt;
 					break;
-				case SLTI:  reg[rd] = (int32_t)reg[rs1] < (int32_t)(I_immediate);
-					printf("%s: reg[%u] = reg[%u] < %X\n", "SLTI", (int32_t)rs1, (int32_t)(I_immediate));
-					break; // signed?
-				case SLTIU: reg[rd] = reg[rs1] < (I_immediate);
-					printf("%s: reg[%u] = reg[%u] < %X\n", "SLTIU", rs1, I_immediate);
+				case SLTI:
+					printf("%s: reg[%u] = reg[%u] < %X = %d\n", "SLTI", (int32_t)rs1, (int32_t)(I_immediate), (int32_t)reg[rs1] < (int32_t)(I_immediate));
+					reg[rd] = (int32_t)reg[rs1] < (int32_t)(I_immediate);
 					break;
-				case XORI:  reg[rd] = reg[rs1] ^ (I_immediate);
-					printf("%s: reg[%u] = reg[%u] ^ %X\n", "XORI", rs1, I_immediate);
+				case SLTIU:
+					printf("%s: reg[%u] = reg[%u] < %X = %d\n", "SLTIU", rs1, I_immediate, reg[rs1] < (I_immediate));
+					reg[rd] = reg[rs1] < (I_immediate);
+					break;
+				case XORI:
+					printf("%s: reg[%u] = reg[%u] ^ %X = %d\n", "XORI", rs1, I_immediate, reg[rs1] ^ (I_immediate));
+					reg[rd] = reg[rs1] ^ (I_immediate);
 					break;
 				case SRI:
 					switch (funct7) {
-						case SRLI:  reg[rd] = reg[rs1] >> shamt;
-							printf("%s: reg[%u] = reg[%u] >> %X\n", "SRLI", rs1, shamt);
+						case SRLI:
+							printf("%s: reg[%u] = reg[%u] >> %X =%d\n", "SRLI", rs1, shamt, reg[rs1] >> shamt);
+							reg[rd] = reg[rs1] >> shamt;
 							break;
 						case SRAI: 
 							reg[rd] = reg[rs1]; temp = reg[rs1] & 0x80000000; while (shamt > 0) {reg[rd] = (reg[rd] >> 1) | temp; shamt--;}
-							printf("%s: reg[%u] = reg[%u] >> %X\n", "SRAI", rs1, shamt);
+							printf("%s: reg[%u] = reg[%u] >> %X = %X\n", "SRAI", rs1, shamt, reg[rd]);
 							break;
 					} break;
 				case ORI:	reg[rd] = reg[rs1] | (I_immediate);
-					printf("%s: reg[%u] = reg[%u] | %X\n", "ORI", rs1, I_immediate);
+					printf("%s: reg[%u] = reg[%u] | %X = %X\n", "ORI", rs1, I_immediate, reg[rd]);
 					break;
 				case ANDI:  reg[rd] = reg[rs1] & (I_immediate);
-					printf("%s: reg[%u] = reg[%u] & %X\n", "ANDI", rs1, I_immediate);
+					printf("%s: reg[%u] = reg[%u] & %X = %X\n", "ANDI", rs1, I_immediate, reg[rd]);
 					break;
 			}
 			pc += 4;
@@ -219,38 +228,38 @@ uint32_t CPU_execute(CPU *cpu)
 				case ADD_SUB:
 					switch (funct7) {
 						case ADD:	reg[rd] = reg[rs1] + reg[rs2];
-							printf("%s: reg[%u] = reg[%u] + reg[%u]\n", "AND", rs1, rs2);
+							printf("%s: reg[%u] = reg[%u] + reg[%u] = %X\n", "AND", rd, rs1, rs2, reg[rd]);
 							break;
 						case SUB:	reg[rd] = reg[rs1] - reg[rs2];
-							printf("%s: reg[%u] = reg[%u] - reg[%u]\n", "SUB", rs1, rs2);
+							printf("%s: reg[%u] = reg[%u] - reg[%u] = %X\n", "SUB", rd, rs1, rs2, reg[rd]);
 							break;
 					} break;
 				case SLL:	reg[rd] = reg[rs1] << reg[rs2];
-					printf("%s: reg[%u] = reg[%u] << reg[%u]\n", "SLL", rs1, rs2);
+					printf("%s: reg[%u] = reg[%u] << reg[%u] = %X\n", "SLL", rd, rs1, rs2, reg[rd]);
 					break;
 				case SLT:	reg[rd] = (int32_t)reg[rs1] < (int32_t)reg[rs2];
-					printf("%s: reg[%u] = reg[%u] < reg[%u]\n", "SLT", rs1, rs2);
+					printf("%s: reg[%u] = reg[%u] < reg[%u] = %X\n", "SLT", rd, rs1, rs2, reg[rd]);
 					break;
 				case SLTU:	reg[rd] = reg[rs1] < reg[rs2];
-					printf("%s: reg[%u] = reg[%u] < reg[%u]\n", "SLTU", rs1, rs2);
+					printf("%s: reg[%u] = reg[%u] < reg[%u] = %X\n", "SLTU", rd, rs1, rs2, reg[rd]);
 					break;
 				case XOR:	reg[rd] = reg[rs1] ^ reg[rs2];
-					printf("%s: reg[%u] = reg[%u] ^ reg[%u]\n", "XOR", rs1, rs2);
+					printf("%s: reg[%u] = reg[%u] ^ reg[%u] =%X\n", "XOR", rd, rs1, rs2, reg[rd]);
 					break;
 				case SR:
 					switch (funct7) {
 						case SRL:	reg[rd] = reg[rs1] >> (reg[rs2] & 0x1f);
-							printf("%s: reg[%u] = reg[%u] >> reg[%u]\n", "SRL", rs1, rs2);
+							printf("%s: reg[%u] = reg[%u] >> reg[%u] = %X\n", "SRL", rd, rs1, rs2, reg[rd]);
 							break;
 						case SRA:	reg[rd] = reg[rs1]; shamt = (reg[rs2] & 0x1f); temp = reg[rs1] & 0x80000000; while (shamt > 0) {reg[rd] = (reg[rd] >> 1) | temp; shamt--;}
-							printf("%s: reg[%u] = reg[%u] >> reg[%u]\n", "SRA", rs1, rs2);
+							printf("%s: reg[%u] = reg[%u] >> reg[%u] = %X\n", "SRA", rd, rs1, rs2, reg[rd]);
 							break;
 					} break;
 				case OR:	reg[rd] = reg[rs1] | reg[rs2];
-					printf("%s: reg[%u] = reg[%u] | reg[%u]\n", "OR", rs1, rs2);
+					printf("%s: reg[%u] = reg[%u] | reg[%u] = %X\n", "OR", rd, rs1, rs2, reg[rd]);
 					break;
 				case AND:	reg[rd] = reg[rs1] & reg[rs2];
-					printf("%s: reg[%u] = reg[%u] & reg[%u]\n", "SRL", rs1, rs2);
+					printf("%s: reg[%u] = reg[%u] & reg[%u] = %X\n", "SRL", rd, rs1, rs2, reg[rd]);
 					break;
 			}
 			pc += 4;
@@ -259,16 +268,20 @@ uint32_t CPU_execute(CPU *cpu)
 		case S:
 			switch (funct3) {
 				case SB:
-					printf("%s: data[reg[%u] + %X] = reg[%u]\n", "SB", rs1, S_immediate, rs2); //in all S instructions the values in regs are converted to unsigned in the specs in moodle
+					printf("%c", (data[(S_immediate) + reg[rs1]] & 0xffffff00) | (reg[rs2] & 0xff));
+					printf("%s: data[reg[%u] + %X] = reg[%u]\n", "SB", rs1, S_immediate, rs2);
+					printf("%s: data[%X] = %X\n", "SB", (S_immediate) + reg[rs1], (data[(S_immediate) + reg[rs1]] & 0xffffff00) | (reg[rs2] & 0xff));
+					// printf();
 					data[(S_immediate) + reg[rs1]] = (data[(S_immediate) + reg[rs1]] & 0xffffff00) | (reg[rs2] & 0xff);
 					break;
 				case SH:
-					printf("%s: (%X + reg[%u] + %X) = reg[%u]\n", "SH", data, rs1, S_immediate, rs2);
+					printf("%s: data[reg[%u] + %X] = reg[%u]\n", "SH", rs1, S_immediate, rs2);
+					printf("%s: data[%X] =  %X\n", "SH", (S_immediate) + reg[rs1], (data[(S_immediate) + reg[rs1]] & 0xffff0000) | (reg[rs2] & 0xffff));
 					data[(S_immediate) + reg[rs1]] = (data[(S_immediate) + reg[rs1]] & 0xffff0000) | (reg[rs2] & 0xffff);
 					break;
 				case SW:
-					printf("%s: (%X + reg[%u] + %X) = reg[%u]\n", "SW", data, rs1, S_immediate, rs2);
-					printf("offset: %X\n", S_immediate + reg[rs1]);
+					printf("%s: data[reg[%u] + %X] = reg[%u]\n", "SW", rs1, S_immediate, rs2);
+					printf("%s: data[%X] = %X\n", "SW", (S_immediate) + reg[rs1], reg[rs2]);
 					data[(S_immediate) + reg[rs1]] = reg[rs2];
 					break;
 			}
@@ -277,23 +290,42 @@ uint32_t CPU_execute(CPU *cpu)
 
 		case L:
 			switch (funct3) {
-				case LB:	reg[rd] = (data[reg[rs1] + (I_immediate)] & 0x80) ? 0xFFFFFF00 | data[(I_immediate) + reg[rs1]] : (data[(I_immediate) + reg[rs1]] & 0xFF); break;
-				case LH:	reg[rd] = (data[reg[rs1] + (I_immediate)] & 0x8000) ? 0xFFFF0000 | data[(I_immediate) + reg[rs1]] : (data[(I_immediate) + reg[rs1]] & 0xFFFF); break;
-				case LW:	reg[rd] = data[reg[rs1] + (I_immediate)]; break;
-				case LBU:	reg[rd] = data[reg[rs1] + (I_immediate)] & 0x000000FF; break;
-				case LHU:	reg[rd] = data[reg[rs1] + (I_immediate)] & 0x0000FFFF; break;
+				word = *(uint32_t *)(data + ((reg[rs1] + (I_immediate)) & 0xFFFFF));
+				case LB:
+					printf("%s: reg[%d] = data[reg[%d] + %X]\n", "LB", rd, rs1, (I_immediate));
+					printf("offset: %X\n", "LB", rd, rs1, (I_immediate));
+					printf("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, reg[rs1] + (I_immediate));
+					reg[rd] = (data[reg[rs1] + (I_immediate)] & 0x80) ? 0xFFFFFF00 | data[reg[rs1] + (I_immediate)] : (data[reg[rs1] + (I_immediate)] & 0xFF); break;
+				case LH:
+					printf("%s: reg[%d] = data[reg[%d] + %X]\n", "LH", rd, rs1, (I_immediate));
+					printf("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, reg[rs1] + (I_immediate));
+					reg[rd] = (data[reg[rs1] + (I_immediate)] & 0x8000) ? 0xFFFF0000 | data[reg[rs1] + (I_immediate)] : (data[reg[rs1] + (I_immediate)] & 0xFFFF); break;
+				case LW:
+					printf("%s: reg[%d] = data[reg[%d] + %X]\n", "LW", rd, rs1, (I_immediate));
+					printf("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, reg[rs1] + (I_immediate));
+					reg[rd] = data[reg[rs1] + (I_immediate)]; break;
+				case LBU:
+					printf("%s: reg[%d] = data[reg[%d] + %X]\n", "LBU", rd, rs1, (I_immediate));
+					printf("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, reg[rs1] + (I_immediate));
+					reg[rd] = word & 0x000000FF; break;
+				case LHU:
+					printf("%s: reg[%d] = data[reg[%d] + %X]\n", "LHU", rd, rs1, (I_immediate));
+					printf("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, reg[rs1] + (I_immediate));
+					reg[rd] = word & 0x0000FFFF; break;
 			}
 			pc += 4;
 			break;
 
 		case B:
 			switch (funct3) {
-				case BEQ:	pc += (reg[rs1] == reg[rs2]) ? B_immediate : 4; break;
-				case BNE:	pc += (reg[rs1] != reg[rs2]) ? B_immediate : 4; break;
-				case BLT:	pc += ((int32_t)reg[rs1] < (int32_t)reg[rs2]) ? B_immediate : 4; break;
-				case BGE:	pc += ((int32_t)reg[rs1] >= (int32_t)reg[rs2]) ? B_immediate : 4; break;
-				case BLTU:	pc += (reg[rs1] < reg[rs2]) ? B_immediate : 4; break;
-				case BGEU:	pc += (reg[rs1] >= reg[rs2]) ? B_immediate : 4; break;
+				case BEQ:
+					printf("%s: reg[%d] = data[reg[%d] + %X]\n", "LHU", rd, rs1, (I_immediate));
+					temp = (reg[rs1] == reg[rs2]) ? B_immediate : 4; pc += temp; break;
+				case BNE:	temp = (reg[rs1] != reg[rs2]) ? B_immediate : 4; pc += temp; break;
+				case BLT:	temp = ((int32_t)reg[rs1] < (int32_t)reg[rs2]) ? B_immediate : 4; pc += temp; break;
+				case BGE:	temp = ((int32_t)reg[rs1] >= (int32_t)reg[rs2]) ? B_immediate : 4; pc += temp; break;
+				case BLTU:	temp = (reg[rs1] < reg[rs2]) ? B_immediate : 4; pc += temp; break;
+				case BGEU:	temp = (reg[rs1] >= reg[rs2]) ? B_immediate : 4; pc += temp; break;
 			} break;
 
 	case NO_INSTR:
@@ -323,9 +355,11 @@ int main(int argc, char *argv[])
 		if (CPU_execute(cpu_inst) == 0)
 			break; // no more instructions to execute
 		printf("\n------------------------------------Regfile values:------------------------------------\n");
-		for (int i=0; i<32; i++) {
+		for (int i=0; i<100; i++) {
 			printf("%d:%X ", i, cpu_inst->regfile_[i]); 
 		} printf("\n");
+		// if ((cpu_inst->pc_ == 0x0000267) | (cpu_inst->pc_ == 0x0000264))
+		// 	printf("\n\n");
 	}
 
 	printf("\n-----------------------RISC-V program terminate------------------------\nRegfile values:\n");
