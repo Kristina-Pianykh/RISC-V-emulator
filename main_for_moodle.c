@@ -5,12 +5,12 @@
 #include <sys/stat.h>
 #include <stdint.h>
 
-#define reg cpu->regfile_
+#define reg cpu->regfile_ //37 instructions
 #define pc cpu->pc_
 #define data cpu->data_mem_
 
 #define U_immediate (inst >> 12) << 12
-#define J_immediate (inst&0x80000000) ? (0xFFF00000 | (inst&0x000FF000) | (inst&0x00100000)>>9 | (inst&0x80000000)>>11 | (inst&0x7FE00000)>>20) << 1 : ((inst&0x000FF000) | (inst&0x00100000)>>9 | (inst&0x80000000)>>11 | (inst&0x7FE00000)>>20) << 1 
+#define J_immediate (inst&0x80000000) ? 0xFFF00000 | (inst&0x000FF000) | (inst&0x00100000)>>9 | (inst&0x80000000)>>11 | (inst&0x7FE00000)>>20 : (inst&0x000FF000) | (inst&0x00100000)>>9 | (inst&0x80000000)>>11 | (inst&0x7FE00000)>>20
 #define B_immediate (inst&0x80000000) ? 0xFFFFE000 | (inst&0xF00)>>7 | (inst&0x7E000000)>>20 | (inst&0x80)<<4 | (inst&0x80000000)>> 19 : (inst&0xF00)>>7 | (inst&0x7E000000)>>20 | (inst&0x80)<<4 | (inst&0x80000000)>> 19
 #define I_immediate (inst&0x80000000) ? 0xFFFFF000 | inst >> 20 : inst >> 20
 #define S_immediate (inst&0x80000000) ? 0xFFFFF000 | (inst&0xFE000000)>>20 | (inst&0xF80)>>7 : (inst&0xFE000000)>>20 | (inst&0xF80)>>7
@@ -83,7 +83,7 @@ CPU *CPU_init(const char *path_to_inst_mem, const char *path_to_data_mem)
 {
 	CPU *cpu = (CPU *)malloc(sizeof(CPU));
 	cpu->data_mem_size_ = 0x400000;
-	cpu->pc_ = 0x0;
+	cpu->pc_ = 0x0000000;
 	CPU_open_instruction_mem(cpu, path_to_inst_mem);
 	CPU_load_data_mem(cpu, path_to_data_mem);
 	return cpu;
@@ -144,39 +144,62 @@ uint32_t CPU_execute(CPU *cpu)
 
 	uint32_t inst = *(uint32_t *)(cpu->instr_mem_ + (cpu->pc_ & 0xFFFFF));
 
-	uint8_t opcode = inst & 0x7f;
-	uint8_t funct3 = (inst >> 12) & 0x7;
-	uint8_t funct7 = (inst >> 25) & 0x7f;
-	uint32_t rd = (inst >> 7) & 0x1f;
-	uint32_t rs1 = (inst >> 15) & 0x1f;
-	uint32_t rs2 = (inst >> 20) & 0x1f;
+	uint8_t opcode = inst & 0x7f;		  // opcode in bits 6..0
+	uint8_t funct3 = (inst >> 12) & 0x7;  // funct3 in bits 14..12
+	uint8_t funct7 = (inst >> 25) & 0x7f; // funct7 in bits 31..25
+	uint32_t rd = (inst >> 7) & 0x1f; // rd in bits 11..7
+	uint32_t rs1 = (inst >> 15) & 0x1f; // rs1 in bits 19..15
+	uint32_t rs2 = (inst >> 20) & 0x1f; // rs2 in bits 24..20
 	uint32_t shamt = rs2; // for SLLI, SRLI and SRAI
 	uint32_t temp;
+	uint32_t word;
 
-	reg[0] = 0; // x0 is always 0
+	reg[0] = 0; // x0 hardwired to 0 at each cycle
 	switch (opcode) {
-		case LUI:	reg[rd] = U_immediate; pc += 4; break;
-		case AUIPC:	reg[rd] = pc + (U_immediate); pc += 4; break;
-		case JAL:	reg[rd] = pc + 4; pc += (J_immediate); break;
-		case JALR:	reg[rd] = pc + 4; pc += (reg[rs1] + (I_immediate)) & 0xfffffffe;
+		case LUI:	
+			reg[rd] = U_immediate;
+			pc += 4;
+			break;
+		case AUIPC:
+			reg[rd] = pc + (U_immediate); pc += 4;
+			break;
+		case JAL:
+			reg[rd] = pc + 4; pc += (J_immediate);
+			break;
+		case JALR:
+			reg[rd] = pc + 4; pc = reg[rs1] + (I_immediate);
 			break;
 
 		case I:
 			switch (funct3) {
-				case ADDI:  reg[rd] = reg[rs1] + (I_immediate); break;
-				case SLLI:  reg[rd] = reg[rs1] << shamt; break;
-				case SLTI:  reg[rd] = (int32_t)reg[rs1] < (int32_t)(I_immediate); break;
-				case SLTIU: reg[rd] = reg[rs1] < (I_immediate); break;
-				case XORI:  reg[rd] = reg[rs1] ^ (I_immediate); break;
+				case ADDI:
+					reg[rd] = reg[rs1] + (I_immediate);
+					break;
+				case SLLI:
+					reg[rd] = reg[rs1] << shamt;
+					break;
+				case SLTI:
+					reg[rd] = (int32_t)reg[rs1] < (int32_t)(I_immediate);
+					break;
+				case SLTIU:
+					reg[rd] = reg[rs1] < (I_immediate);
+					break;
+				case XORI:
+					reg[rd] = reg[rs1] ^ (I_immediate);
+					break;
 				case SRI:
 					switch (funct7) {
-						case SRLI:  reg[rd] = reg[rs1] >> shamt; break;
+						case SRLI:
+							reg[rd] = reg[rs1] >> shamt;
+							break;
 						case SRAI: 
 							reg[rd] = reg[rs1]; temp = reg[rs1] & 0x80000000; while (shamt > 0) {reg[rd] = (reg[rd] >> 1) | temp; shamt--;}
 							break;
 					} break;
-				case ORI:	reg[rd] = reg[rs1] | (I_immediate); break;
-				case ANDI:  reg[rd] = reg[rs1] & (I_immediate); break;
+				case ORI:	reg[rd] = reg[rs1] | (I_immediate);
+					break;
+				case ANDI:  reg[rd] = reg[rs1] & (I_immediate);
+					break;
 			}
 			pc += 4;
 			break;
@@ -185,21 +208,30 @@ uint32_t CPU_execute(CPU *cpu)
 			switch (funct3) {
 				case ADD_SUB:
 					switch (funct7) {
-						case ADD:	reg[rd] = reg[rs1] + reg[rs2]; break;
-						case SUB:	reg[rd] = reg[rs1] - reg[rs2]; break;
+						case ADD:	reg[rd] = reg[rs1] + reg[rs2];
+							break;
+						case SUB:	reg[rd] = reg[rs1] - reg[rs2];
+							break;
 					} break;
-				case SLL:	reg[rd] = reg[rs1] << reg[rs2]; break;
-				case SLT:	reg[rd] = (int32_t)reg[rs1] < (int32_t)reg[rs2]; break;
-				case SLTU:	reg[rd] = reg[rs1] < reg[rs2]; break;
-				case XOR:	reg[rd] = reg[rs1] ^ reg[rs2]; break;
+				case SLL:	reg[rd] = reg[rs1] << reg[rs2];
+					break;
+				case SLT:	reg[rd] = (int32_t)reg[rs1] < (int32_t)reg[rs2];
+					break;
+				case SLTU:	reg[rd] = reg[rs1] < reg[rs2];
+					break;
+				case XOR:	reg[rd] = reg[rs1] ^ reg[rs2];
+					break;
 				case SR:
 					switch (funct7) {
-						case SRL:	reg[rd] = reg[rs1] >> (reg[rs2] & 0x1f); break;
+						case SRL:	reg[rd] = reg[rs1] >> (reg[rs2] & 0x1f);
+							break;
 						case SRA:	reg[rd] = reg[rs1]; shamt = (reg[rs2] & 0x1f); temp = reg[rs1] & 0x80000000; while (shamt > 0) {reg[rd] = (reg[rd] >> 1) | temp; shamt--;}
 							break;
 					} break;
-				case OR:	reg[rd] = reg[rs1] | reg[rs2]; break;
-				case AND:	reg[rd] = reg[rs1] & reg[rs2]; break;
+				case OR:	reg[rd] = reg[rs1] | reg[rs2];
+					break;
+				case AND:	reg[rd] = reg[rs1] & reg[rs2];
+					break;
 			}
 			pc += 4;
 			break;
@@ -207,42 +239,50 @@ uint32_t CPU_execute(CPU *cpu)
 		case S:
 			switch (funct3) {
 				case SB:
-					data[(S_immediate) + reg[rs1]] = (data[(S_immediate) + reg[rs1]] & 0xffffff00) | (reg[rs2] & 0xff);
+					if (((uint8_t)(S_immediate) + reg[rs1]) == 0x5000)
+						printf("%c", data[0x5000]);
+					data[(S_immediate) + reg[rs1]] = (uint8_t)(data[(S_immediate) + reg[rs1]] & 0xffffff00) | (reg[rs2] & 0xff);
 					break;
 				case SH:
 					data[(S_immediate) + reg[rs1]] = (data[(S_immediate) + reg[rs1]] & 0xffff0000) | (reg[rs2] & 0xffff);
 					break;
-				case SW: data[(S_immediate) + reg[rs1]] = reg[rs2]; break;
+				case SW:
+					*(uint32_t *)(data + ((reg[rs1] + (S_immediate)) & 0xFFFFF)) = reg[rs2];
+					break;
 			}
 			pc += 4;
 			break;
 
 		case L:
+			word = *(uint32_t *)(data + ((reg[rs1] + (I_immediate)) & 0xFFFFF));
 			switch (funct3) {
-				case LB:	reg[rd] = (data[reg[rs1] + (I_immediate)] & 0x80) ? 0xFFFFFF00 | data[(I_immediate) + reg[rs1]] : (data[(I_immediate) + reg[rs1]] & 0xFF); break;
-				case LH:	reg[rd] = (data[reg[rs1] + (I_immediate)] & 0x8000) ? 0xFFFF0000 | data[(I_immediate) + reg[rs1]] : (data[(I_immediate) + reg[rs1]] & 0xFFFF); break;
-				case LW:	reg[rd] = data[reg[rs1] + (I_immediate)]; break;
-				case LBU:	reg[rd] = data[reg[rs1] + (I_immediate)] & 0x000000FF; break;
-				case LHU:	reg[rd] = data[reg[rs1] + (I_immediate)] & 0x0000FFFF; break;
+				case LB:	reg[rd] = (word & 0x80) ? (0xFFFFFF00 | word) : (word & 0xFF); break;
+				case LH:	reg[rd] = (word & 0x8000) ? (0xFFFF0000 | word) : (word & 0xFFFF); break;
+				case LW:	reg[rd] = word; break;
+				case LBU:	reg[rd] = data[reg[rs1] + (I_immediate)]; break;
+				case LHU:	reg[rd] = word & 0x0000FFFF; break;
 			}
 			pc += 4;
 			break;
 
 		case B:
 			switch (funct3) {
-				case BEQ:	pc += (reg[rs1] == reg[rs2]) ? B_immediate : 4; break;
-				case BNE:	pc += (reg[rs1] != reg[rs2]) ? B_immediate : 4; break;
-				case BLT:	pc += ((int32_t)reg[rs1] < (int32_t)reg[rs2]) ? B_immediate : 4; break;
-				case BGE:	pc += ((int32_t)reg[rs1] >= (int32_t)reg[rs2]) ? B_immediate : 4; break;
-				case BLTU:	pc += (reg[rs1] < reg[rs2]) ? B_immediate : 4; break;
-				case BGEU:	pc += (reg[rs1] >= reg[rs2]) ? B_immediate : 4; break;
+				case BEQ:	temp = (reg[rs1] == reg[rs2]) ? B_immediate : 4; pc += temp; break;
+				case BNE:	temp = (reg[rs1] != reg[rs2]) ? B_immediate : 4; pc += temp; break;
+				case BLT:	temp = ((int32_t)reg[rs1] < (int32_t)reg[rs2]) ? B_immediate : 4; pc += temp; break;
+				case BGE:	temp = ((int32_t)reg[rs1] >= (int32_t)reg[rs2]) ? B_immediate : 4; pc += temp; break;
+				case BLTU:	temp = (reg[rs1] < reg[rs2]) ? B_immediate : 4; pc += temp; break;
+				case BGEU:	temp = (reg[rs1] >= reg[rs2]) ? B_immediate : 4; pc += temp; break;
 			} break;
 
 	case NO_INSTR:
 		break;
     default:
-        fprintf(stderr, "[-] Invalid instruction");
+        fprintf(stderr,
+                "[-] Invalid instruction: opcode:0x%x, funct3:0x%x, funct3:0x%x\n"
+                , opcode, funct3, funct7);
         return 0;
+        /*exit(1);*/
 }
 	return inst;
 }
@@ -252,12 +292,18 @@ int main(int argc, char *argv[])
 	printf("C Praktikum\nHU Risc-V  Emulator 2022\n");
 
 	CPU *cpu_inst;
-	cpu_inst = CPU_init(argv[1], argv[2]);
-	
-	for (uint32_t i = 0; i < 1000000; i++)
+	const char *instr_path = "instruction_mem.bin";
+	const char *data_path = "data_mem.bin";
+
+	cpu_inst = CPU_init(instr_path, data_path);
+	// cpu_inst = CPU_init(argv[1], argv[2]);
+	uint32_t y = 0;
+	for (uint32_t i = 0; i < 70000; i++)
 	{ // run 70000 cycles
+		y = i;
 		if (CPU_execute(cpu_inst) == 0)
 			break; // no more instructions to execute
+		cpu_inst->regfile_[0] = 0;
 	}
 
 	printf("\n-----------------------RISC-V program terminate------------------------\nRegfile values:\n");
