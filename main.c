@@ -83,7 +83,7 @@ CPU *CPU_init(const char *path_to_inst_mem, const char *path_to_data_mem)
 {
 	CPU *cpu = (CPU *)malloc(sizeof(CPU));
 	cpu->data_mem_size_ = 0x400000;
-	cpu->pc_ = 0x0;
+	cpu->pc_ = 0x0000000;
 	CPU_open_instruction_mem(cpu, path_to_inst_mem);
 	CPU_load_data_mem(cpu, path_to_data_mem);
 	return cpu;
@@ -159,7 +159,7 @@ uint32_t CPU_execute(CPU *cpu)
 	printf("instr: %X\n", inst);
 	printf("opcode: %X\n", opcode);
 	printf("rd:%d rs1:%d rs2:%d U_immediate:0x%X J_immediate:0x%X B_immediate:0x%X I_immediate:0x%X S_immediate:0x%X funct3:0x%X funct7:0x%X\n",rd,rs1,rs2,U_immediate,J_immediate,B_immediate,I_immediate,S_immediate,funct3,funct7);
-	if (pc == 0x20) //0x000264 from this is broken
+	if (pc == 0x80000268)
 		printf("breakpoint\n");
 	switch (opcode) {
 		case LUI:	
@@ -177,7 +177,7 @@ uint32_t CPU_execute(CPU *cpu)
 			break;
 		case JALR:
 			printf("%s: reg[%u] = %u + 4 = %X, pc = reg[%u] + %X = %X\n", "JALR", rd, pc, pc + 4, rs1, I_immediate, pc + (reg[rs1] + (I_immediate)) & 0xfffffffe);
-			reg[rd] = pc + 4; pc += (reg[rs1] + (I_immediate)) & 0xfffffffe;
+			reg[rd] = pc + 4; pc = reg[rs1] + (I_immediate);
 			break;
 
 		case I:
@@ -268,11 +268,16 @@ uint32_t CPU_execute(CPU *cpu)
 		case S:
 			switch (funct3) {
 				case SB:
-					printf("%c", (data[(S_immediate) + reg[rs1]] & 0xffffff00) | (reg[rs2] & 0xff));
 					printf("%s: data[reg[%u] + %X] = reg[%u]\n", "SB", rs1, S_immediate, rs2);
 					printf("%s: data[%X] = %X\n", "SB", (S_immediate) + reg[rs1], (data[(S_immediate) + reg[rs1]] & 0xffffff00) | (reg[rs2] & 0xff));
 					// printf();
-					data[(S_immediate) + reg[rs1]] = (data[(S_immediate) + reg[rs1]] & 0xffffff00) | (reg[rs2] & 0xff);
+					word = *(uint16_t *)(data + ((reg[rs1] + (S_immediate)) & 0xFFFFF));
+					printf("word: %X\n", word);
+					*(uint16_t *)(data + ((reg[rs1] + (S_immediate)) & 0xFFFFF)) = (reg[rs2] & 0xff);
+					printf("byte to write: %X\n", (reg[rs2] & 0xff));
+					printf("byte to write converted: %X\n", ((uint8_t) reg[rs2] & 0xff));
+					printf("char: %c\n", (uint8_t)(data[(S_immediate) + reg[rs1]] & 0xffffff00) | (reg[rs2] & 0xff));
+					data[(S_immediate) + reg[rs1]] = (uint8_t)(data[(S_immediate) + reg[rs1]] & 0xffffff00) | (reg[rs2] & 0xff);
 					break;
 				case SH:
 					printf("%s: data[reg[%u] + %X] = reg[%u]\n", "SH", rs1, S_immediate, rs2);
@@ -282,32 +287,39 @@ uint32_t CPU_execute(CPU *cpu)
 				case SW:
 					printf("%s: data[reg[%u] + %X] = reg[%u]\n", "SW", rs1, S_immediate, rs2);
 					printf("%s: data[%X] = %X\n", "SW", (S_immediate) + reg[rs1], reg[rs2]);
-					data[(S_immediate) + reg[rs1]] = reg[rs2];
+					*(uint32_t *)(data + ((reg[rs1] + (S_immediate)) & 0xFFFFF)) = reg[rs2];
+					// data[(S_immediate) + reg[rs1]] = reg[rs2];
+					word = *(uint32_t *)(data + ((reg[rs1] + (S_immediate)) & 0xFFFFF));
+					printf("%X\n", word);
 					break;
 			}
 			pc += 4;
 			break;
 
 		case L:
+			word = *(uint32_t *)(data + ((reg[rs1] + (I_immediate)) & 0xFFFFF));
+			printf("word: %X\n", word);
 			switch (funct3) {
-				word = *(uint32_t *)(data + ((reg[rs1] + (I_immediate)) & 0xFFFFF));
 				case LB:
 					printf("%s: reg[%d] = data[reg[%d] + %X]\n", "LB", rd, rs1, (I_immediate));
 					printf("offset: %X\n", "LB", rd, rs1, (I_immediate));
 					printf("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, reg[rs1] + (I_immediate));
-					reg[rd] = (data[reg[rs1] + (I_immediate)] & 0x80) ? 0xFFFFFF00 | data[reg[rs1] + (I_immediate)] : (data[reg[rs1] + (I_immediate)] & 0xFF); break;
+					reg[rd] = (word & 0x80) ? (0xFFFFFF00 | word) : (word & 0xFF); break;
 				case LH:
 					printf("%s: reg[%d] = data[reg[%d] + %X]\n", "LH", rd, rs1, (I_immediate));
 					printf("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, reg[rs1] + (I_immediate));
-					reg[rd] = (data[reg[rs1] + (I_immediate)] & 0x8000) ? 0xFFFF0000 | data[reg[rs1] + (I_immediate)] : (data[reg[rs1] + (I_immediate)] & 0xFFFF); break;
+					reg[rd] = (word & 0x8000) ? (0xFFFF0000 | word) : (word & 0xFFFF); break;
 				case LW:
 					printf("%s: reg[%d] = data[reg[%d] + %X]\n", "LW", rd, rs1, (I_immediate));
 					printf("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, reg[rs1] + (I_immediate));
-					reg[rd] = data[reg[rs1] + (I_immediate)]; break;
+					reg[rd] = word; break;
 				case LBU:
+					word = *(uint16_t *)(data + ((reg[rs1] + (I_immediate)) & 0xFFFFF));
+					printf("word: %X\n", word);
 					printf("%s: reg[%d] = data[reg[%d] + %X]\n", "LBU", rd, rs1, (I_immediate));
 					printf("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, reg[rs1] + (I_immediate));
-					reg[rd] = word & 0x000000FF; break;
+					// reg[rd] = word & 0x000000FF; break;
+					reg[rd] = data[reg[rs1] + (I_immediate)]; break;
 				case LHU:
 					printf("%s: reg[%d] = data[reg[%d] + %X]\n", "LHU", rd, rs1, (I_immediate));
 					printf("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, reg[rs1] + (I_immediate));
@@ -326,7 +338,7 @@ uint32_t CPU_execute(CPU *cpu)
 				case BGE:	temp = ((int32_t)reg[rs1] >= (int32_t)reg[rs2]) ? B_immediate : 4; pc += temp; break;
 				case BLTU:	temp = (reg[rs1] < reg[rs2]) ? B_immediate : 4; pc += temp; break;
 				case BGEU:	temp = (reg[rs1] >= reg[rs2]) ? B_immediate : 4; pc += temp; break;
-			} break;
+			} printf("%s\n", "branch"); break;
 
 	case NO_INSTR:
 		break;
@@ -350,17 +362,21 @@ int main(int argc, char *argv[])
 
 	cpu_inst = CPU_init(instr_path, data_path);
 	// cpu_inst = CPU_init(argv[1], argv[2]);
+	uint32_t y = 0;
 	for (uint32_t i = 0; i < 70000; i++)
 	{ // run 70000 cycles
+		y = i;
 		if (CPU_execute(cpu_inst) == 0)
 			break; // no more instructions to execute
+		cpu_inst->regfile_[0] = 0;
 		printf("\n------------------------------------Regfile values:------------------------------------\n");
-		for (int i=0; i<100; i++) {
+		for (int i=0; i<32; i++) {
 			printf("%d:%X ", i, cpu_inst->regfile_[i]); 
 		} printf("\n");
 		// if ((cpu_inst->pc_ == 0x0000267) | (cpu_inst->pc_ == 0x0000264))
 		// 	printf("\n\n");
 	}
+	printf("%d iterations\n", y);
 
 	printf("\n-----------------------RISC-V program terminate------------------------\nRegfile values:\n");
 
