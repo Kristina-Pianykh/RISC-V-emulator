@@ -144,17 +144,17 @@ uint32_t CPU_execute(CPU *cpu)
 
 	uint32_t inst = *(uint32_t *)(cpu->instr_mem_ + (cpu->pc_ & 0xFFFFF));
 
-	uint8_t opcode = inst & 0x7f;		  // opcode in bits 6..0
-	uint8_t funct3 = (inst >> 12) & 0x7;  // funct3 in bits 14..12
-	uint8_t funct7 = (inst >> 25) & 0x7f; // funct7 in bits 31..25
-	uint32_t rd = (inst >> 7) & 0x1f; // rd in bits 11..7
-	uint32_t rs1 = (inst >> 15) & 0x1f; // rs1 in bits 19..15
-	uint32_t rs2 = (inst >> 20) & 0x1f; // rs2 in bits 24..20
+	uint8_t opcode = inst & 0x7f;
+	uint8_t funct3 = (inst >> 12) & 0x7;
+	uint8_t funct7 = (inst >> 25) & 0x7f;
+	uint32_t rd = (inst >> 7) & 0x1f;
+	uint32_t rs1 = (inst >> 15) & 0x1f;
+	uint32_t rs2 = (inst >> 20) & 0x1f;
 	uint32_t shamt = rs2; // for SLLI, SRLI and SRAI
 	uint32_t temp;
 	uint32_t word;
 
-	reg[0] = 0; // x0 hardwired to 0 at each cycle
+	reg[0] = 0; // x0 always 0
 	switch (opcode) {
 		case LUI:	
 			reg[rd] = U_immediate;
@@ -278,11 +278,8 @@ uint32_t CPU_execute(CPU *cpu)
 	case NO_INSTR:
 		break;
     default:
-        fprintf(stderr,
-                "[-] Invalid instruction: opcode:0x%x, funct3:0x%x, funct3:0x%x\n"
-                , opcode, funct3, funct7);
+        fprintf(stderr, "Invalid instruction\n");
         return 0;
-        /*exit(1);*/
 }
 	return inst;
 }
@@ -292,11 +289,8 @@ int main(int argc, char *argv[])
 	printf("C Praktikum\nHU Risc-V  Emulator 2022\n");
 
 	CPU *cpu_inst;
-	const char *instr_path = "instruction_mem.bin";
-	const char *data_path = "data_mem.bin";
 
-	cpu_inst = CPU_init(instr_path, data_path);
-	// cpu_inst = CPU_init(argv[1], argv[2]);
+	cpu_inst = CPU_init(argv[1], argv[2]);
 	uint32_t y = 0;
 	for (uint32_t i = 0; i < 70000; i++)
 	{ // run 70000 cycles
