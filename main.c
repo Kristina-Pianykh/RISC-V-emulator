@@ -187,7 +187,7 @@ uint32_t CPU_execute(CPU *cpu)
 					reg[rd] = reg[rs1] + (I_immediate);
 					break;
 				case SLLI:
-					printf("%s: reg[%u] = reg[%u] << %X = %X\n", "SLLI", rs1, shamt, reg[rs1] << shamt);
+					printf("%s: reg[%u] = reg[%u] << %X = %X\n", "SLLI", rd, rs1, shamt, reg[rs1] << shamt);
 					reg[rd] = reg[rs1] << shamt;
 					break;
 				case SLTI:
@@ -195,7 +195,7 @@ uint32_t CPU_execute(CPU *cpu)
 					reg[rd] = (int32_t)reg[rs1] < (int32_t)(I_immediate);
 					break;
 				case SLTIU:
-					printf("%s: reg[%u] = reg[%u] < %X = %d\n", "SLTIU", rs1, I_immediate, reg[rs1] < (I_immediate));
+					printf("%s: reg[%u] = reg[%u] < %X = %d\n", "SLTIU", rd, rs1, I_immediate, reg[rs1] < (I_immediate));
 					reg[rd] = reg[rs1] < (I_immediate);
 					break;
 				case XORI:
@@ -205,7 +205,7 @@ uint32_t CPU_execute(CPU *cpu)
 				case SRI:
 					switch (funct7) {
 						case SRLI:
-							printf("%s: reg[%u] = reg[%u] >> %X =%d\n", "SRLI", rs1, shamt, reg[rs1] >> shamt);
+							printf("%s: reg[%u] = reg[%u] >> %X =%X\n", "SRLI", rd, rs1, shamt, reg[rs1] >> shamt);
 							reg[rd] = reg[rs1] >> shamt;
 							break;
 						case SRAI: 
