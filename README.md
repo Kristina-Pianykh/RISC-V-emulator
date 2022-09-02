@@ -7,7 +7,7 @@ The specifications of the RISC-V instruction set architecture (ISA) can be found
 - `risc-v_emu` is the executable to run
 - `main.c` contains all the source code
 - `main_debugging.c` is the source code with printing statements for debugging (which are easily "turned on/off" by commenting out the respective `trace` macro)
-- `/AssemblerTestProgramm`, `/Beispielprojekt`, `/ProgrammEins` and `/ProgrammPrimzahlen` contain the binaries needed to run the emulator.
+- `/AssemblerTestProgramm`, `/ProgrammEins` and `/ProgrammPrimzahlen` contain the binaries needed to run the emulator.
 
 ## Running the program
 
