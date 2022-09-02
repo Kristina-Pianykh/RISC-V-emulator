@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <stdint.h>
 
-#define reg cpu->regfile_ //37 instructions
+#define reg cpu->regfile_
 #define pc cpu->pc_
 #define data cpu->data_mem_
 
@@ -154,76 +154,35 @@ uint32_t CPU_execute(CPU *cpu)
 	uint32_t temp;
 	uint32_t addr;
 
-//#define trace printf
+//#define trace printf // leave uncommented for debugging
 #define trace(...)
 
-	reg[0] = 0; // x0 always 0
-	trace("\npc: %X\n", pc);
-	trace("instr: %X\n", inst);
-	trace("opcode: %X\n", opcode);
-	trace("rd:%d rs1:%d rs2:%d U_immediate:0x%X J_immediate:0x%X B_immediate:0x%X I_immediate:0x%X S_immediate:0x%X funct3:0x%X funct7:0x%X\n",rd,rs1,rs2,U_immediate,J_immediate,B_immediate,I_immediate,S_immediate,funct3,funct7);
+	reg[0] = 0; // x0 is hardwired to 0
 	switch (opcode) {
-		case LUI:	
-			reg[rd] = U_immediate;
-			pc += 4;
-			trace("%s: reg[%u] = %X\n", "LUI", rd, U_immediate);
-			break;
-		case AUIPC:
-			trace("%s: reg[%u] = %u + %X = %X\n", "AUIPC", pc, U_immediate, pc + (U_immediate));
-			reg[rd] = pc + (U_immediate); pc += 4;
-			break;
-		case JAL:
-			trace("%s: reg[%u] = %u + 4 = %X, pc = %X + %X = %X\n", "JAL", rd, pc, pc + 4, pc, J_immediate, (J_immediate) + pc);
-			reg[rd] = pc + 4; pc += (J_immediate);
-			break;
-		case JALR:
-			trace("%s: reg[%u] = %u + 4 = %X, pc = reg[%u] + %X = %X\n", "JALR", rd, pc, pc + 4, rs1, I_immediate, pc + (reg[rs1] + (I_immediate)) & 0xfffffffe);
-			temp = reg[rs1];
-			reg[rd] = pc + 4; pc = temp + (I_immediate);
-			break;
+		case LUI:	reg[rd] = U_immediate; pc += 4; break;
+		case AUIPC:	reg[rd] = pc + (U_immediate); pc += 4; break;
+		case JAL:	reg[rd] = pc + 4; pc += (J_immediate); break;
+		case JALR:	temp = reg[rs1]; reg[rd] = pc + 4; pc = temp + (I_immediate); break;
 
 		case I:
 			switch (funct3) {
-				case ADDI:
-					trace("%s: reg[%u] = reg[%u] + %X = %X\n", "ADDI", rd, rs1, (I_immediate), reg[rs1] + (I_immediate));
-					reg[rd] = reg[rs1] + (I_immediate);
-					break;
-				case SLLI:
-					trace("%s: reg[%u] = reg[%u] << %X = %X\n", "SLLI", rd, rs1, shamt, reg[rs1] << shamt);
-					reg[rd] = reg[rs1] << shamt;
-					break;
-				case SLTI:
-					trace("%s: reg[%u] = reg[%u] < %X = %d\n", "SLTI", (int32_t)rs1, (int32_t)(I_immediate), (int32_t)reg[rs1] < (int32_t)(I_immediate));
-					reg[rd] = (int32_t)reg[rs1] < (int32_t)(I_immediate);
-					break;
-				case SLTIU:
-					trace("%s: reg[%u] = reg[%u] < %X = %d\n", "SLTIU", rd, rs1, I_immediate, reg[rs1] < (I_immediate));
-					reg[rd] = reg[rs1] < (I_immediate);
-					break;
-				case XORI:
-					trace("%s: reg[%u] = reg[%u] ^ %X = %d\n", "XORI", rs1, I_immediate, reg[rs1] ^ (I_immediate));
-					reg[rd] = reg[rs1] ^ (I_immediate);
-					break;
+				case ADDI:	reg[rd] = reg[rs1] + (I_immediate); break;
+				case SLLI:	reg[rd] = reg[rs1] << shamt; break;
+				case SLTI:	reg[rd] = (int32_t)reg[rs1] < (int32_t)(I_immediate); break;
+				case SLTIU:	reg[rd] = reg[rs1] < (I_immediate); break;
+				case XORI:	reg[rd] = reg[rs1] ^ (I_immediate); break;
 				case SRI:
 					switch (funct7) {
-						case SRLI:
-							trace("%s: reg[%u] = reg[%u] >> %X = %X\n", "SRLI", rd, rs1, shamt, reg[rs1] >> shamt);
-							reg[rd] = reg[rs1] >> shamt;
-							break;
+						case SRLI:	reg[rd] = reg[rs1] >> shamt; break;
 						case SRAI: {
 							uint32_t result = reg[rs1]; 
 							temp = reg[rs1] & 0x80000000; while (shamt > 0) {result = (result >> 1) | temp; shamt--;}
 							reg[rd] = result;
-							trace("%s: reg[%u] = reg[%u] >> %X = %X\n", "SRAI", rs1, shamt, reg[rd]);
 							break;
 						}
 					} break;
-				case ORI:	reg[rd] = reg[rs1] | (I_immediate);
-					trace("%s: reg[%u] = reg[%u] | %X = %X\n", "ORI", rs1, I_immediate, reg[rd]);
-					break;
-				case ANDI:  reg[rd] = reg[rs1] & (I_immediate);
-					trace("%s: reg[%u] = reg[%u] & %X = %X\n", "ANDI", rs1, I_immediate, reg[rd]);
-					break;
+				case ORI:	reg[rd] = reg[rs1] | (I_immediate); break;
+				case ANDI:  reg[rd] = reg[rs1] & (I_immediate); break;
 			}
 			pc += 4;
 			break;
@@ -232,49 +191,25 @@ uint32_t CPU_execute(CPU *cpu)
 			switch (funct3) {
 				case ADD_SUB:
 					switch (funct7) {
-						case ADD:	reg[rd] = reg[rs1] + reg[rs2];
-							trace("%s: reg[%u] = reg[%u] + reg[%u] = %X\n", "AND", rd, rs1, rs2, reg[rd]);
-							break;
-						case SUB:	reg[rd] = reg[rs1] - reg[rs2];
-							trace("%s: reg[%u] = reg[%u] - reg[%u] = %X\n", "SUB", rd, rs1, rs2, reg[rd]);
-							break;
+						case ADD:	reg[rd] = reg[rs1] + reg[rs2]; break;
+						case SUB:	reg[rd] = reg[rs1] - reg[rs2]; break;
 					} break;
-				case SLL:
-					trace("reg[%u] = %X\n", rs2, reg[rs2]);
-					trace("reg[%u](5 bits) = %X\n", rs2, reg[rs2] & 0x1f);
-					reg[rd] = reg[rs1] << (reg[rs2] & 0x1f); // should be the lowest 5 bits of rs2 register
-					trace("%s: reg[%u] = reg[%u] << reg[%u](5 bits) = %X\n", "SLL", rd, rs1, rs2, reg[rd]);
-					break;
-				case SLT:	reg[rd] = (int32_t)reg[rs1] < (int32_t)reg[rs2];
-					trace("%s: reg[%u] = reg[%u] < reg[%u] = %X\n", "SLT", rd, rs1, rs2, reg[rd]);
-					break;
-				case SLTU:	reg[rd] = reg[rs1] < reg[rs2];
-					trace("%s: reg[%u] = reg[%u] < reg[%u] = %X\n", "SLTU", rd, rs1, rs2, reg[rd]);
-					break;
-				case XOR:	reg[rd] = reg[rs1] ^ reg[rs2];
-					trace("%s: reg[%u] = reg[%u] ^ reg[%u] =%X\n", "XOR", rd, rs1, rs2, reg[rd]);
-					break;
+				case SLL:	reg[rd] = reg[rs1] << (reg[rs2] & 0x1f); break;
+				case SLT:	reg[rd] = (int32_t)reg[rs1] < (int32_t)reg[rs2]; break;
+				case SLTU:	reg[rd] = reg[rs1] < reg[rs2]; break;
+				case XOR:	reg[rd] = reg[rs1] ^ reg[rs2]; break;
 				case SR:
 					switch (funct7) {
-						case SRL:	reg[rd] = reg[rs1] >> (reg[rs2] & 0x1f);
-							trace("reg[%u] = %X\n", rs2, reg[rs2]);
-							trace("reg[%u](5 bits) = %X\n", rs2, reg[rs2] & 0x1f);
-							trace("%s: reg[%u] = reg[%u] >> reg[%u] = %X\n", "SRL", rd, rs1, rs2, reg[rd]);
-							break;
+						case SRL:	reg[rd] = reg[rs1] >> (reg[rs2] & 0x1f); break;
 						case SRA: {
 							uint32_t result = reg[rs1];
 							shamt = (reg[rs2] & 0x1f); temp = reg[rs1] & 0x80000000; while (shamt > 0) {result = (result >> 1) | temp; shamt--;}
 							reg[rd] = result;
-							trace("%s: reg[%u] = reg[%u] >> reg[%u] = %X\n", "SRA", rd, rs1, rs2, reg[rd]);
 							break;
 						}
 					} break;
-				case OR:	reg[rd] = reg[rs1] | reg[rs2];
-					trace("%s: reg[%u] = reg[%u] | reg[%u] = %X\n", "OR", rd, rs1, rs2, reg[rd]);
-					break;
-				case AND:	reg[rd] = reg[rs1] & reg[rs2];
-					trace("%s: reg[%u] = reg[%u] & reg[%u] = %X\n", "SRL", rd, rs1, rs2, reg[rd]);
-					break;
+				case OR:	reg[rd] = reg[rs1] | reg[rs2]; break;
+				case AND:	reg[rd] = reg[rs1] & reg[rs2]; break;
 			}
 			pc += 4;
 			break;
@@ -282,24 +217,9 @@ uint32_t CPU_execute(CPU *cpu)
 		case S:
 			addr = (S_immediate) + reg[rs1];
 			switch (funct3) {
-				case SB:
-					trace("%s: data[reg[%u] + %X] = reg[%u]\n", "SB", rs1, S_immediate, rs2);
-					trace("%s: data[%X] = %X\n", "SB", addr, (data[addr] & 0xffffff00) | (reg[rs2] & 0xff));
-					trace("byte to write: %X\n", (reg[rs2] & 0xff));
-					trace("byte to write converted: %X\n", ((uint8_t) reg[rs2] & 0xff));
-					data[addr] = reg[rs2];
-					if (addr == 0x5000) putchar(data[addr] & 0x7f);
-					break;
-				case SH:
-					trace("%s: data[reg[%u] + %X] = reg[%u]\n", "SH", rs1, S_immediate, rs2);
-					trace("%s: data[%X] =  %X\n", "SH",addr, (data[addr] & 0xffff0000) | (reg[rs2] & 0xffff));
-					*(uint16_t *)(data + addr) = reg[rs2];
-					break;
-				case SW:
-					trace("%s: data[reg[%u] + %X] = reg[%u]\n", "SW", rs1, S_immediate, rs2);
-					trace("%s: data[%X] = %X\n", "SW", addr, reg[rs2]);
-					*(uint32_t *)(data + addr) = reg[rs2];
-					break;
+				case SB:	data[addr] = reg[rs2]; if (addr == 0x5000) putchar(data[addr] & 0x7f); break;
+				case SH:	*(uint16_t *)(data + addr) = reg[rs2]; break;
+				case SW:	*(uint32_t *)(data + addr) = reg[rs2]; break;
 			}
 			pc += 4;
 			break;
@@ -307,42 +227,24 @@ uint32_t CPU_execute(CPU *cpu)
 		case L:
 			addr = reg[rs1] + (I_immediate);
 			switch (funct3) {
-				case LB:
-					trace("%s: reg[%d] = data[reg[%d] + %X]\n", "LB", rd, rs1, (I_immediate));
-					trace("offset: %X\n", "LB", rd, rs1, (I_immediate));
-					trace("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, addr);
-					reg[rd] = (int8_t)data[addr]; break;
-				case LH:
-					trace("%s: reg[%d] = data[reg[%d] + %X]\n", "LH", rd, rs1, (I_immediate));
-					trace("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, addr);
-					reg[rd] = *(int16_t *)(data + addr); break;
-				case LW:
-					trace("%s: reg[%d] = data[reg[%d] + %X]\n", "LW", rd, rs1, (I_immediate));
-					trace("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rs1, addr);
-					reg[rd] = *(int32_t *)(data + addr); break;
-				case LBU:
-					trace("%s: reg[%d] = data[reg[%d] + %X]\n", "LBU", rd, rs1, (I_immediate));
-					trace("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, addr);
-					reg[rd] = data[addr]; break;
-				case LHU:
-					trace("%s: reg[%d] = data[reg[%d] + %X]\n", "LHU", rd, rs1, (I_immediate));
-					trace("reg[%d] + (I_immediate) = %X (all 32 bits here, no sign extension)\n", rd, addr);
-					reg[rd] = *(uint16_t *)(data + addr); break;
+				case LB:	reg[rd] = (int8_t)data[addr]; break;
+				case LH:	reg[rd] = *(int16_t *)(data + addr); break;
+				case LW:	reg[rd] = *(int32_t *)(data + addr); break;
+				case LBU:	reg[rd] = data[addr]; break;
+				case LHU:	reg[rd] = *(uint16_t *)(data + addr); break;
 			}
 			pc += 4;
 			break;
 
 		case B:
 			switch (funct3) {
-				case BEQ:
-					trace("%s: reg[%d] = data[reg[%d] + %X]\n", "LHU", rd, rs1, (I_immediate));
-					temp = (reg[rs1] == reg[rs2]) ? B_immediate : 4; pc += temp; break;
+				case BEQ:	temp = (reg[rs1] == reg[rs2]) ? B_immediate : 4; pc += temp; break;
 				case BNE:	temp = (reg[rs1] != reg[rs2]) ? B_immediate : 4; pc += temp; break;
 				case BLT:	temp = ((int32_t)reg[rs1] < (int32_t)reg[rs2]) ? B_immediate : 4; pc += temp; break;
 				case BGE:	temp = ((int32_t)reg[rs1] >= (int32_t)reg[rs2]) ? B_immediate : 4; pc += temp; break;
 				case BLTU:	temp = (reg[rs1] < reg[rs2]) ? B_immediate : 4; pc += temp; break;
 				case BGEU:	temp = (reg[rs1] >= reg[rs2]) ? B_immediate : 4; pc += temp; break;
-			} trace("%s\n", "branch"); break;
+			} break;
 
 	case NO_INSTR:
 		break;
@@ -355,14 +257,12 @@ uint32_t CPU_execute(CPU *cpu)
 
 int main(int argc, char *argv[])
 {
-	printf("C Praktikum\nHU Risc-V  Emulator 2022\n");
-
 	CPU *cpu_inst;
 
 	cpu_inst = CPU_init(argv[1], argv[2]);
 	uint32_t y = 0;
 	for (uint32_t i = 0; i < 1000000; i++)
-	{ // run 70000 cycles
+	{
 		y = i;
 		if (CPU_execute(cpu_inst) == 0)
 			break; // no more instructions to execute
